@@ -1,4 +1,4 @@
-# Mixed-Effects Models of Perceptual Decision-Making
+# Sequential Decision-Making: Mixed-Effects Models
 
 An R analysis of trial-level data from the Beehive perceptual decision-making experiment. The script develops and compares models examining relationships among sensory evidence, previous choices, confidence judgments, and sequential decision behaviour.
 
@@ -32,7 +32,7 @@ install.packages(c(
 
 ## Run
 
-Place the participant-level CSV files in the working directory, install the dependencies, and execute GLM_2023_06.R.
+Place the participant-level CSV files in the working directory, install the dependencies, and execute sequential_decision_models.R.
 
 ## Outputs
 
