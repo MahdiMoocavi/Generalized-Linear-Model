@@ -21,36 +21,75 @@ curdir <- getwd()
 setwd(curdir)
 
 ### Reading the data
-full_df <- data.frame()
+# The analysis expects one CSV file per participant, following the
+# Beehive task's DotsTask_sub<ID>.csv naming convention.
 n_pp <- 72
+input_files <- sprintf("./DotsTask_sub%d.csv", seq_len(n_pp))
+missing_files <- input_files[!file.exists(input_files)]
 
-for (i in 1:n_pp){
-  
-  file_name <- paste('./DotsTask_sub',i,'.csv',sep = "")
-  data <- read.csv(file_name, header = T)
-  data$X <- NULL
-  full_df <- rbind(full_df,data)
+if (length(missing_files) > 0) {
+  stop(
+    "Missing participant files: ",
+    paste(missing_files, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+participant_dfs <- lapply(input_files, function(file_name) {
+  participant_data <- read.csv(file_name, header = TRUE)
+  if ("X" %in% names(participant_data)) {
+    participant_data$X <- NULL
+  }
+  participant_data
+})
+
+full_df <- dplyr::bind_rows(participant_dfs)
+
+required_columns <- c(
+  "sub", "block", "trial", "response", "pre_dots_location_mean",
+  "cj", "condition", "accuracy", "running", "rt"
+)
+missing_columns <- setdiff(required_columns, names(full_df))
+if (length(missing_columns) > 0) {
+  stop(
+    "Input data are missing required columns: ",
+    paste(missing_columns, collapse = ", "),
+    call. = FALSE
+  )
 }
 
 #### Data Processing
-# Lag variables
-full_df <- full_df %>% mutate(
-  resp = ifelse(response == "c", 0, 1),
-  prev_resp = lag(resp),
-  sign_evi = ifelse(pre_dots_location_mean < 0, "left", "right"),
-  prev_evidence = lag(pre_dots_location_mean),
-  prev_sign_evi = ifelse(prev_evidence < 0, "left", "right"),
-  prev_cj = lag(cj),
-  prev_abs_evi = abs(prev_evidence),
-  prev_condition = lag(condition),
-  prev_acc = lag(accuracy),
-)
+# Construct sequential predictors within each participant. This prevents
+# the final trial of one participant from becoming the previous trial of
+# the next participant.
+full_df <- full_df %>%
+  arrange(sub, block, trial) %>%
+  group_by(sub) %>%
+  mutate(
+    prev_response = lag(response),
+    sign_evi = ifelse(pre_dots_location_mean < 0, "left", "right"),
+    prev_evidence = lag(pre_dots_location_mean),
+    prev_sign_evi = ifelse(prev_evidence < 0, "left", "right"),
+    prev_cj = lag(cj),
+    prev_abs_evi = abs(prev_evidence),
+    prev_condition = lag(condition),
+    prev_acc = lag(accuracy)
+  ) %>%
+  ungroup()
 
-# Data cleaning
-full_df <- full_df %>% filter(response != "timed-out",
-                              prev_resp != "timed-out",
-                              trial != 1,
-                              running != "practice")
+# Retain valid main-experiment trials with a valid response on the current
+# and immediately preceding trial. Timed-out responses are excluded before
+# the binary response variable is created.
+full_df <- full_df %>%
+  filter(
+    running != "practice",
+    trial != 1,
+    response %in% c("c", "n"),
+    prev_response %in% c("c", "n")
+  ) %>%
+  mutate(
+    resp = ifelse(response == "c", 0L, 1L)
+  )
 
 # Missing data
 sum(is.na(full_df)) 
